@@ -1,23 +1,18 @@
 import java.io.*;
 import java.net.*;
+import java.nio.file.Files;
 import java.util.concurrent.atomic.AtomicInteger;
 
+
 public class TCPMultiThreadedServer {
-    private static final AtomicInteger clientCount = new AtomicInteger(0); // Thread-safe client counter
+    private static final AtomicInteger clientCount = new AtomicInteger(0);
 
     public static void main(String[] args) {
         int port = 5000;
-
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             System.out.println("[*] Multi-threaded server running on port " + port);
-
-            while (true) { // Keeps accepting multiple clients
-                Socket clientSocket = serverSocket.accept();
-                int clientNumber = clientCount.incrementAndGet(); // Assign a unique client number
-                System.out.println("[*] Client #" + clientNumber + " connected.");
-                new Thread(new ClientHandler(clientSocket, clientNumber)).start(); // Handle each client in a new thread
-            }
-
+            while (true)
+                new Thread(new ClientHandler(serverSocket.accept(), clientCount.incrementAndGet())).start();
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -35,47 +30,32 @@ class ClientHandler implements Runnable {
 
     @Override
     public void run() {
-        try (
-                DataInputStream dis = new DataInputStream(clientSocket.getInputStream());
-                DataOutputStream dos = new DataOutputStream(clientSocket.getOutputStream())
-        ) {
-            while (true) { // Keep listening for multiple requests
-                String fileName = dis.readUTF(); // Read file request
+        System.out.println("[*] Client #" + clientNumber + " connected.");
+        try (DataInputStream dis = new DataInputStream(clientSocket.getInputStream());
+             DataOutputStream dos = new DataOutputStream(clientSocket.getOutputStream())) {
 
-                if (fileName.equalsIgnoreCase("exit")) {
-                    System.out.println("[*] Client #" + clientNumber + " disconnected.");
-                    break; // Exit loop when client sends "exit"
-                }
-
+            String fileName;
+            while (!(fileName = dis.readUTF()).equalsIgnoreCase("exit")) {
                 File file = new File(fileName);
                 if (file.exists()) {
-                    dos.writeInt((int) file.length()); // Send file size
-                    byte[] buffer = new byte[(int) file.length()];
-
-                    try (FileInputStream fis = new FileInputStream(file)) {
-                        fis.read(buffer);
-                    }
-                    dos.write(buffer); // Send file
-                    dos.writeInt(clientNumber); // Send client number
-                    dos.flush();
-
+                    byte[] buffer = Files.readAllBytes(file.toPath());
+                    dos.writeInt(buffer.length);
+                    dos.write(buffer);
                     System.out.println("[*] Sent file: " + fileName + " to Client #" + clientNumber);
-
                 } else {
-                    dos.writeInt(0); // File not found
-                    dos.writeInt(clientNumber); // Still send client number
-                    dos.flush();
+                    dos.writeInt(0);
                     System.out.println("[!] Client #" + clientNumber + " requested missing file: " + fileName);
                 }
+                dos.writeInt(clientNumber);
+                dos.flush();
             }
+            System.out.println("[*] Client #" + clientNumber + " disconnected.");
         } catch (IOException e) {
             System.out.println("[!] Client #" + clientNumber + " connection lost.");
         } finally {
             try {
-                clientSocket.close(); // Close socket after client exits
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+                clientSocket.close();
+            } catch (IOException ignored) {}
         }
     }
 }

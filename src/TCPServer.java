@@ -1,5 +1,6 @@
 import java.io.*;
 import java.net.*;
+import java.nio.file.Files;
 
 // Project lab1
 public class TCPServer {
@@ -26,35 +27,26 @@ public class TCPServer {
                 DataInputStream dis = new DataInputStream(clientSocket.getInputStream());
                 DataOutputStream dos = new DataOutputStream(clientSocket.getOutputStream())
         ) {
-            while (true) { // Keep listening for multiple requests from the same client
-                String fileName = dis.readUTF();
-
-                if (fileName.equalsIgnoreCase("exit")) {
-                    System.out.println("[*] Client requested to exit.");
-                    break; // Stop loop when client wants to exit
-                }
-
+            String fileName;
+            while (!(fileName = dis.readUTF()).equalsIgnoreCase("exit")) {
                 File file = new File(fileName);
                 if (file.exists()) {
-                    dos.writeInt((int) file.length()); // Send file size
-                    byte[] buffer = new byte[(int) file.length()];
-
-                    try (FileInputStream fis = new FileInputStream(file)) {
-                        fis.read(buffer);
-                    }
-                    dos.write(buffer); // Send file
-                    dos.flush();
+                    byte[] buffer = Files.readAllBytes(file.toPath()); // Read file directly
+                    dos.writeInt(buffer.length);
+                    dos.write(buffer);
                     System.out.println("[*] Sent file: " + fileName);
                 } else {
-                    dos.writeInt(0); // File not found
-                    dos.flush();
+                    dos.writeInt(0);
                     System.out.println("[!] File not found: " + fileName);
                 }
+                dos.flush();
             }
+            System.out.println("[*] Client requested to exit.");
         } catch (EOFException e) {
             System.out.println("[!] Client disconnected unexpectedly.");
         } finally {
-            clientSocket.close(); // Close the connection properly
+            clientSocket.close();
         }
     }
+
 }

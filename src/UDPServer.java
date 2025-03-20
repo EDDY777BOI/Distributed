@@ -3,7 +3,6 @@ import java.net.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-// Multithreaded UDP Server
 public class UDPServer {
     private static final int PORT = 5001;
     private static final String EOF_MARKER = "EOF_SIGNAL";
@@ -13,18 +12,13 @@ public class UDPServer {
         ExecutorService executor = Executors.newFixedThreadPool(5);
 
         try (DatagramSocket serverSocket = new DatagramSocket(PORT)) {
-            System.out.println("[*] Multi-threaded server running on port " + PORT);
+            System.out.println("[*] UDP Server running on port " + PORT);
+            byte[] buffer = new byte[1024];
 
             while (true) {
-                byte[] receiveBuffer = new byte[1024];
-                DatagramPacket receivePacket = new DatagramPacket(receiveBuffer, receiveBuffer.length);
-                serverSocket.receive(receivePacket);
-
-                clientCount++;
-                int assignedClientId = clientCount;
-                System.out.println("[*] Client #" + assignedClientId + " connected.");
-
-                executor.execute(new ClientHandler(serverSocket, receivePacket, assignedClientId));
+                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                serverSocket.receive(packet);
+                executor.execute(new ClientHandler(serverSocket, packet, ++clientCount));
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -32,51 +26,47 @@ public class UDPServer {
     }
 
     static class ClientHandler implements Runnable {
-        private DatagramSocket serverSocket;
-        private DatagramPacket receivePacket;
-        private int clientId;
+        private final DatagramSocket serverSocket;
+        private final DatagramPacket packet;
+        private final int clientId;
 
         public ClientHandler(DatagramSocket socket, DatagramPacket packet, int clientId) {
             this.serverSocket = socket;
-            this.receivePacket = packet;
+            this.packet = packet;
             this.clientId = clientId;
         }
 
         @Override
         public void run() {
             try {
-                String fileName = new String(receivePacket.getData(), 0, receivePacket.getLength());
-                InetAddress clientAddress = receivePacket.getAddress();
-                int clientPort = receivePacket.getPort();
-
+                String fileName = new String(packet.getData(), 0, packet.getLength());
+                InetAddress clientAddress = packet.getAddress();
+                int clientPort = packet.getPort();
                 File file = new File(fileName);
-                System.out.println("[*] Client #" + clientId + " requested file: " + fileName);
 
-                if (file.exists()) {
-                    FileInputStream fis = new FileInputStream(file);
-                    byte[] fileData = new byte[4096];
-                    int bytesRead;
-
-                    while ((bytesRead = fis.read(fileData)) != -1) {
-                        DatagramPacket sendPacket = new DatagramPacket(fileData, bytesRead, clientAddress, clientPort);
-                        serverSocket.send(sendPacket);
-                    }
-                    fis.close();
-
-                    // Send EOF marker to indicate file transfer completion
-                    byte[] eofBytes = EOF_MARKER.getBytes();
-                    DatagramPacket eofPacket = new DatagramPacket(eofBytes, eofBytes.length, clientAddress, clientPort);
-                    serverSocket.send(eofPacket);
-                    System.out.println("[*] Sent file: " + fileName + " to Client #" + clientId);
-                } else {
-                    String errorMessage = "FILE_NOT_FOUND";
-                    DatagramPacket errorPacket = new DatagramPacket(errorMessage.getBytes(), errorMessage.length(), clientAddress, clientPort);
-                    serverSocket.send(errorPacket);
-                    System.out.println("[!] File not found: " + fileName);
-                }
+                System.out.println("[*] Client #" + clientId + " requested: " + fileName);
+                if (file.exists()) sendFile(file, clientAddress, clientPort);
+                else sendResponse("FILE_NOT_FOUND", clientAddress, clientPort);
             } catch (IOException e) {
                 e.printStackTrace();
             }
+        }
+
+        private void sendFile(File file, InetAddress address, int port) throws IOException {
+            try (FileInputStream fis = new FileInputStream(file)) {
+                byte[] buffer = new byte[4096];
+                int bytesRead;
+                while ((bytesRead = fis.read(buffer)) != -1)
+                    serverSocket.send(new DatagramPacket(buffer, bytesRead, address, port));
+
+                sendResponse(EOF_MARKER, address, port);
+                System.out.println("[*] Sent file: " + file.getName() + " to Client #" + clientId);
+            }
+        }
+
+        private void sendResponse(String message, InetAddress address, int port) throws IOException {
+            byte[] data = message.getBytes();
+            serverSocket.send(new DatagramPacket(data, data.length, address, port));
         }
     }
 }
