@@ -1,31 +1,51 @@
 import java.io.*;
 import java.net.*;
 
+// Multithreaded UDP Client
 public class UDPClient {
+    private static final String SERVER_IP = "127.0.0.1";
+    private static final int SERVER_PORT = 5001;
+    private static final String EOF_MARKER = "EOF_SIGNAL";
+
     public static void main(String[] args) {
-        String serverAddress = "127.0.0.1";
-        int port = 5000;
-        String fileName = "test.txt";
+        try (DatagramSocket socket = new DatagramSocket()) {
+            BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+            System.out.println("[*] Connected to server. Type 'exit' to quit.");
 
-        try (DatagramSocket clientSocket = new DatagramSocket()) {
-            byte[] sendBuffer = fileName.getBytes();
-            InetAddress serverIP = InetAddress.getByName(serverAddress);
-            DatagramPacket sendPacket = new DatagramPacket(sendBuffer, sendBuffer.length, serverIP, port);
-            clientSocket.send(sendPacket);
+            while (true) {
+                System.out.print("[*] Enter file name to request (or 'exit' to quit): ");
+                String fileName = reader.readLine();
 
-            byte[] receiveBuffer = new byte[4096];
-            DatagramPacket receivePacket = new DatagramPacket(receiveBuffer, receiveBuffer.length);
-            clientSocket.receive(receivePacket);
+                if (fileName.equalsIgnoreCase("exit")) {
+                    System.out.println("[*] Exiting...");
+                    break;
+                }
 
-            String receivedData = new String(receivePacket.getData(), 0, receivePacket.getLength());
+                byte[] buffer = fileName.getBytes();
+                DatagramPacket requestPacket = new DatagramPacket(buffer, buffer.length, InetAddress.getByName(SERVER_IP), SERVER_PORT);
+                socket.send(requestPacket);
 
-            if (receivedData.equals("File not found")) {
-                System.out.println("[!] File not found on server.");
-            } else {
-                FileOutputStream fos = new FileOutputStream("received_" + fileName);
-                fos.write(receivePacket.getData(), 0, receivePacket.getLength());
+                FileOutputStream fos = new FileOutputStream(fileName);
+                buffer = new byte[4096];
+                DatagramPacket responsePacket = new DatagramPacket(buffer, buffer.length);
+
+                while (true) {
+                    socket.receive(responsePacket);
+                    String response = new String(responsePacket.getData(), 0, responsePacket.getLength());
+
+                    if ("FILE_NOT_FOUND".equals(response)) {
+                        System.out.println("[!] File not found on server.");
+                        break;
+                    }
+
+                    if (EOF_MARKER.equals(response)) {
+                        System.out.println("[*] File '" + fileName + "' received successfully.");
+                        break;
+                    }
+
+                    fos.write(responsePacket.getData(), 0, responsePacket.getLength());
+                }
                 fos.close();
-                System.out.println("[*] File received successfully.");
             }
         } catch (IOException e) {
             e.printStackTrace();

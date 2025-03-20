@@ -60,6 +60,7 @@ class ClientHandler implements Runnable {
                     dos.flush();
 
                     System.out.println("[*] Sent file: " + fileName + " to Client #" + clientNumber);
+
                 } else {
                     dos.writeInt(0); // File not found
                     dos.writeInt(clientNumber); // Still send client number

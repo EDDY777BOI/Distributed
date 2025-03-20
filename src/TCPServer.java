@@ -10,10 +10,10 @@ public class TCPServer {
             System.out.println("[*] Single-threaded server running on port " + port);
             System.out.println("[*] Waiting for a client...");
 
-            Socket clientSocket = serverSocket.accept(); // Accept one client
+            Socket clientSocket = serverSocket.accept();    // Accept one client
             System.out.println("[*] Client connected.");
 
-            handleClient(clientSocket); // Process client requests
+            handleClient(clientSocket);                     // Process client requests
             System.out.println("[*] Client disconnected. Server shutting down.");
 
         } catch (IOException e) {
